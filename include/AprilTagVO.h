@@ -1,3 +1,6 @@
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
@@ -6,8 +9,6 @@
 
 #include <AprilTags/TagDetector.h>
 #include <AprilTags/Tag36h11.h>
-
-static const std::string OPENCV_WINDOW = "Image window";
 
 class AprilTagVO
 {
@@ -34,5 +35,5 @@ private:
   double camera_focal_length_x; // in pixels. late 2013 macbookpro retina = 700
   double camera_focal_length_y; // in pixels
   double tag_size; // tag side length of frame in meters 
-  bool  show_debug_image;
+  bool  show_output_video;
 };
