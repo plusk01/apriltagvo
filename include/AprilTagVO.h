@@ -4,13 +4,17 @@
 #include <math.h>
 
 #include <ros/ros.h>
-#include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
-#include <sensor_msgs/image_encodings.h>
+#include <image_transport/image_transport.h>
+
 #include <opencv2/opencv.hpp>
 
 #include <AprilTags/TagDetector.h>
 #include <AprilTags/Tag36h11.h>
+
+#include "apriltagvo/AprilTag.h"
+#include "apriltagvo/AprilTagList.h"
+
 
 class AprilTagVO
 {
@@ -18,7 +22,7 @@ public:
   AprilTagVO();
   ~AprilTagVO();
 
-  void convert_to_msg(AprilTags::TagDetection& detection, int width, int height);
+  apriltagvo::AprilTag convert_to_msg(AprilTags::TagDetection& detection, int width, int height);
 
   void processCvImage(cv_bridge::CvImagePtr cv_ptr);
 
@@ -29,9 +33,13 @@ private:
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;
 
+  // image transport pub/sub
   image_transport::ImageTransport it_;
   image_transport::Subscriber image_sub_;
   image_transport::Publisher image_pub_;
+
+  // ROS publishers and subscribers
+  ros::Publisher tag_list_pub;
 
   AprilTags::TagDetector* tag_detector;
 

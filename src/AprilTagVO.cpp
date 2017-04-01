@@ -15,16 +15,19 @@ AprilTagVO::AprilTagVO() :
   tag_size(0.029), // 1 1/8in marker = 0.029m
   show_output_video(false)
 {
-  // Subscribe to input video feed and publish output video feed
-  it_ = image_transport::ImageTransport(nh_);
-  image_sub_ = it_.subscribe("input_image", 1, &AprilTagVO::imageCallback, this);
-  image_pub_ = it_.advertise("output_image", 1);
-
   // Use a private node handle so that multiple instances of the node can
   // be run simultaneously while using different parameters.
   nh_private_.param<double>("focal_length_px", camera_focal_length_x, 700.0);
   nh_private_.param<double>("tag_size_m", tag_size, 0.029);
   nh_private_.param<bool>("show_output_video", show_output_video, false);
+
+  // Create ROS publishers
+  tag_list_pub = nh_.advertise<apriltagvo::AprilTagList>("apriltags", 100);
+
+  // Subscribe to input video feed and publish output video feed
+  it_ = image_transport::ImageTransport(nh_);
+  image_sub_ = it_.subscribe("input_image", 1, &AprilTagVO::imageCallback, this);
+  image_pub_ = it_.advertise("output_image", 1);
 
   // Assumes a 1:1 Pixel Aspect Ratio (PAR) [A good assumption]
   camera_focal_length_y = camera_focal_length_x;
@@ -46,7 +49,7 @@ AprilTagVO::~AprilTagVO() {
 
 // ----------------------------------------------------------------------------
 
-void AprilTagVO::convert_to_msg(AprilTags::TagDetection& detection, int width, int height) {
+apriltagvo::AprilTag AprilTagVO::convert_to_msg(AprilTags::TagDetection& detection, int width, int height) {
   // recovering the relative pose of a tag:
 
   // NOTE: for this to be accurate, it is necessary to use the
@@ -73,18 +76,18 @@ void AprilTagVO::convert_to_msg(AprilTags::TagDetection& detection, int width, i
   wRo_to_euler(fixed_rot, yaw, pitch, roll);
 
 
-  // seer::AprilTag tag_msg;
+  apriltagvo::AprilTag tag_msg;
 
-  // tag_msg.id = detection.id;
-  // tag_msg.hamming_distance = detection.hammingDistance;
-  // tag_msg.distance = translation.norm() * 100.0;
-  // tag_msg.z = translation(0) * 100.0; // depth from camera
-  // tag_msg.x = translation(1) * 100.0; // horizontal displacement (camera pov right = +ve)
-  // tag_msg.y = translation(2) * 100.0; // vertical displacement
-  // tag_msg.yaw = yaw;
-  // tag_msg.pitch = pitch;
-  // tag_msg.roll = roll;
-  // return tag_msg;
+  tag_msg.id = detection.id;
+  tag_msg.hamming_distance = detection.hammingDistance;
+  tag_msg.distance = translation.norm() * 100.0;
+  tag_msg.z = translation(0) * 100.0; // depth from camera
+  tag_msg.x = translation(1) * 100.0; // horizontal displacement (camera pov right = +ve)
+  tag_msg.y = translation(2) * 100.0; // vertical displacement
+  tag_msg.yaw = yaw;
+  tag_msg.pitch = pitch;
+  tag_msg.roll = roll;
+  return tag_msg;
 }
 
 // ----------------------------------------------------------------------------
@@ -116,18 +119,18 @@ void AprilTagVO::processCvImage(cv_bridge::CvImagePtr cv_ptr)  {
   cv::Mat image_gray;
   cv::cvtColor(cv_ptr->image, image_gray, CV_BGR2GRAY);
   vector<AprilTags::TagDetection> detections = tag_detector->extractTags(image_gray);
-  // vector<seer::AprilTag> tag_msgs;
+  vector<apriltagvo::AprilTag> tag_msgs;
 
   for (int i=0; i<detections.size(); i++) {
     detections[i].draw(cv_ptr->image);
-    // tag_msgs.push_back(convert_to_msg(detections[i], cv_ptr->image.cols, cv_ptr->image.rows));
+    tag_msgs.push_back(convert_to_msg(detections[i], cv_ptr->image.cols, cv_ptr->image.rows));
   }
 
-  // if(detections.size() > 0) { // take this out if you want absence notificaiton
-    // seer::AprilTagList tag_list;
-    // tag_list.april_tags = tag_msgs;
-    // tag_list_pub.publish(tag_list);
-  // }
+  if(detections.size() > 0) { // take this out if you want absence notificaiton
+    apriltagvo::AprilTagList tag_list;
+    tag_list.april_tags = tag_msgs;
+    tag_list_pub.publish(tag_list);
+  }
 }
 
 // ----------------------------------------------------------------------------
