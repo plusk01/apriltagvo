@@ -4,17 +4,27 @@ static const std::string OPENCV_WINDOW = "Image window";
 
 // ----------------------------------------------------------------------------
 
-AprilTagVO::AprilTagVO() {
+AprilTagVO::AprilTagVO() :
+  nh_(ros::NodeHandle()),
+  nh_private_("~"),
+  it_(nh_), 
+  tag_codes(AprilTags::tagCodes36h11), 
+  tag_detector(NULL),
+  camera_focal_length_y(700),
+  camera_focal_length_x(700),
+  tag_size(0.029), // 1 1/8in marker = 0.029m
+  show_output_video(false)
+{
   // Subscribe to input video feed and publish output video feed
-  image_sub_ = it_.subscribe("input_image", 1, &AprilTagVO::imageCB, this);
+  it_ = image_transport::ImageTransport(nh_);
+  image_sub_ = it_.subscribe("input_image", 1, &AprilTagVO::imageCallback, this);
   image_pub_ = it_.advertise("output_image", 1);
 
   // Use a private node handle so that multiple instances of the node can
   // be run simultaneously while using different parameters.
-  ros::NodeHandle nh_("~"); 
-  nh_.param<double>("focal_length_px", camera_focal_length_x, 700.0);
-  nh_.param<double>("tag_size_m", tag_size, 0.029);
-  nh_.param<bool>("show_output_video", show_output_video, false);
+  nh_private_.param<double>("focal_length_px", camera_focal_length_x, 700.0);
+  nh_private_.param<double>("tag_size_m", tag_size, 0.029);
+  nh_private_.param<bool>("show_output_video", show_output_video, false);
 
   // Assumes a 1:1 Pixel Aspect Ratio (PAR) [A good assumption]
   camera_focal_length_y = camera_focal_length_x;
@@ -79,7 +89,7 @@ void AprilTagVO::convert_to_msg(AprilTags::TagDetection& detection, int width, i
 
 // ----------------------------------------------------------------------------
 
-void AprilTagVO::imageCB(const sensor_msgs::ImageConstPtr& msg) {
+void AprilTagVO::imageCallback(const sensor_msgs::ImageConstPtr& msg) {
   cv_bridge::CvImagePtr cv_ptr;
   try {
     cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
@@ -106,18 +116,18 @@ void AprilTagVO::processCvImage(cv_bridge::CvImagePtr cv_ptr)  {
   cv::Mat image_gray;
   cv::cvtColor(cv_ptr->image, image_gray, CV_BGR2GRAY);
   vector<AprilTags::TagDetection> detections = tag_detector->extractTags(image_gray);
-  vector<seer::AprilTag> tag_msgs;
+  // vector<seer::AprilTag> tag_msgs;
 
   for (int i=0; i<detections.size(); i++) {
     detections[i].draw(cv_ptr->image);
-    tag_msgs.push_back(convert_to_msg(detections[i], cv_ptr->image.cols, cv_ptr->image.rows));
+    // tag_msgs.push_back(convert_to_msg(detections[i], cv_ptr->image.cols, cv_ptr->image.rows));
   }
 
-  if(detections.size() > 0) { // take this out if you want absence notificaiton
-    seer::AprilTagList tag_list;
-    tag_list.april_tags = tag_msgs;
-    tag_list_pub.publish(tag_list);
-  }
+  // if(detections.size() > 0) { // take this out if you want absence notificaiton
+    // seer::AprilTagList tag_list;
+    // tag_list.april_tags = tag_msgs;
+    // tag_list_pub.publish(tag_list);
+  // }
 }
 
 // ----------------------------------------------------------------------------
@@ -135,7 +145,7 @@ void AprilTagVO::wRo_to_euler(const Eigen::Matrix3d& wRo, double& yaw, double& p
 // ----------------------------------------------------------------------------
 
 double AprilTagVO::standardRad(double t) {
-  
+
   // normalize the angle to be within the interval [-pi, pi]
   if (t >= 0.0) {
     t = fmod(t+M_PI, 2*M_PI) - M_PI;

@@ -66,6 +66,9 @@ target_link_libraries(apriltags
   ${Eigen_LIBRARIES}
 )
 
+# AprilTagVO Node
+add_executable(apriltagvo src/AprilTagVO_node.cpp src/AprilTagVO.cpp)
+target_link_libraries(apriltagvo apriltags ${catkin_LIBRARIES})
 
 
 ## Add cmake target dependencies of the library
