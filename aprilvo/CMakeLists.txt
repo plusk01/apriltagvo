@@ -11,7 +11,10 @@ find_package(catkin REQUIRED
 	image_transport
 	cv_bridge
 	sensor_msgs
+  nav_msgs
 	message_generation
+  tf
+  image_geometry
 
   # AprilTags library from MIT
   apriltags

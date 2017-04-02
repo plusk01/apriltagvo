@@ -10,27 +10,22 @@ AprilVO::AprilVO() :
   it_(nh_), 
   tag_codes(AprilTags::tagCodes36h11), 
   tag_detector(NULL),
-  camera_focal_length_y(700),
-  camera_focal_length_x(700),
   tag_size(0.029), // 1 1/8in marker = 0.029m
   show_output_video(false)
 {
   // Use a private node handle so that multiple instances of the node can
   // be run simultaneously while using different parameters.
-  nh_private_.param<double>("focal_length_px", camera_focal_length_x, 700.0);
   nh_private_.param<double>("tag_size_m", tag_size, 0.029);
   nh_private_.param<bool>("show_output_video", show_output_video, false);
 
   // Create ROS publishers
   tag_list_pub = nh_.advertise<aprilvo::AprilTagList>("apriltags", 100);
+  estimate_pub = nh_.advertise<nav_msgs::Odometry>("estimate", 1);
 
   // Subscribe to input video feed and publish output video feed
   it_ = image_transport::ImageTransport(nh_);
-  image_sub_ = it_.subscribe("input_image", 1, &AprilVO::imageCallback, this);
+  image_sub_ = it_.subscribeCamera("input_image", 1, &AprilVO::cameraCallback, this);
   image_pub_ = it_.advertise("output_image", 1);
-
-  // Assumes a 1:1 Pixel Aspect Ratio (PAR) [A good assumption]
-  camera_focal_length_y = camera_focal_length_x;
 
   // Create a new April Tag detector from the library
   tag_detector = new AprilTags::TagDetector(tag_codes);
@@ -48,8 +43,10 @@ AprilVO::~AprilVO() {
 }
 
 // ----------------------------------------------------------------------------
+// Private Methods
+// ----------------------------------------------------------------------------
 
-aprilvo::AprilTag AprilVO::convert_to_msg(AprilTags::TagDetection& detection, int width, int height) {
+aprilvo::AprilTag AprilVO::convert_to_msg(AprilTags::TagDetection& detection) {
   // recovering the relative pose of a tag:
 
   // NOTE: for this to be accurate, it is necessary to use the
@@ -59,10 +56,10 @@ aprilvo::AprilTag AprilVO::convert_to_msg(AprilTags::TagDetection& detection, in
   Eigen::Vector3d translation;
   Eigen::Matrix3d rotation;
   detection.getRelativeTranslationRotation(tag_size, 
-                                           camera_focal_length_x, 
-                                           camera_focal_length_y, 
-                                           width / 2, 
-                                           height / 2,
+                                           cam_model_.fx(), 
+                                           cam_model_.fy(), 
+                                           cam_model_.cx(), 
+                                           cam_model_.cy(),
                                            translation, 
                                            rotation);
 
@@ -92,21 +89,24 @@ aprilvo::AprilTag AprilVO::convert_to_msg(AprilTags::TagDetection& detection, in
 
 // ----------------------------------------------------------------------------
 
-void AprilVO::imageCallback(const sensor_msgs::ImageConstPtr& msg) {
+void AprilVO::cameraCallback(const sensor_msgs::ImageConstPtr& image, const sensor_msgs::CameraInfoConstPtr& cinfo) {
   cv_bridge::CvImagePtr cv_ptr;
   try {
-    cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+    cv_ptr = cv_bridge::toCvCopy(image, sensor_msgs::image_encodings::BGR8);
   } catch (cv_bridge::Exception& e) {
     ROS_ERROR("cv_bridge exception: %s", e.what());
     return;
   }
+
+  // update the camera model with the camera's intrinsic parameters
+  cam_model_.fromCameraInfo(cinfo);
 
   processCvImage(cv_ptr);
 
   if (show_output_video) {
     // Update GUI Window
     cv::imshow(OPENCV_WINDOW, cv_ptr->image);
-    cv::waitKey(3);
+    cv::waitKey(1);
   }
 
   // Output modified video stream
@@ -123,7 +123,7 @@ void AprilVO::processCvImage(cv_bridge::CvImagePtr cv_ptr)  {
 
   for (int i=0; i<detections.size(); i++) {
     detections[i].draw(cv_ptr->image);
-    tag_msgs.push_back(convert_to_msg(detections[i], cv_ptr->image.cols, cv_ptr->image.rows));
+    tag_msgs.push_back(convert_to_msg(detections[i]));
   }
 
   if(detections.size() > 0) { // take this out if you want absence notificaiton
@@ -133,8 +133,6 @@ void AprilVO::processCvImage(cv_bridge::CvImagePtr cv_ptr)  {
   }
 }
 
-// ----------------------------------------------------------------------------
-// Private Methods
 // ----------------------------------------------------------------------------
 
 void AprilVO::wRo_to_euler(const Eigen::Matrix3d& wRo, double& yaw, double& pitch, double& roll) {
